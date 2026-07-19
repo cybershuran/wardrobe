@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wardrobe · 衣橱</title>
+<style>
+  :root{
+    --bg:#fff; --cell:#efefef; --ink:#111; --muted:#8b8b8b; --line:#e5e5e5;
+    --panelW:min(560px, 92vw);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Helvetica Neue",Helvetica,Arial,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  ::selection{background:#111;color:#fff}
+
+  /* ---------- 顶栏 ---------- */
+  nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);display:flex;align-items:center;gap:34px;
+    padding:0 28px;height:64px;overflow-x:auto;white-space:nowrap}
+  .brand{font-weight:700;letter-spacing:.22em;font-size:15px;flex-shrink:0}
+  .brand span{font-weight:400;letter-spacing:.1em;color:#555;margin-left:8px;font-size:14px}
+  .tab{font-size:13px;letter-spacing:.18em;font-weight:600;color:#666;cursor:pointer;
+    padding:6px 0;border-bottom:2px solid transparent;flex-shrink:0}
+  .tab small{font-weight:400;letter-spacing:0;color:#aaa;margin-left:5px;font-size:11.5px}
+  .tab.on{color:var(--ink);border-bottom-color:var(--ink)}
+
+  /* ---------- 网格 ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1px;background:#fff;padding:1px 0}
+  .cell{background:var(--cell);aspect-ratio:1;position:relative;cursor:pointer;overflow:hidden;
+    display:flex;align-items:center;justify-content:center}
+  .cell img{width:82%;height:82%;object-fit:contain;mix-blend-mode:multiply;transition:transform .3s}
+  .cell:hover img{transform:scale(1.05)}
+  .cell .pk{position:absolute;top:12px;right:12px;width:26px;height:26px;border-radius:50%;
+    border:1.5px solid #bbb;background:rgba(255,255,255,.85);color:transparent;
+    display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;
+    opacity:0;transition:.15s}
+  .cell:hover .pk{opacity:1}
+  .cell.picked .pk{opacity:1;background:#111;border-color:#111;color:#fff}
+
+  /* ---------- OUTFITS ---------- */
+  .outfits{padding:34px 28px 100px;max-width:1100px;margin:0 auto}
+  .lk{border-bottom:1px solid var(--line);padding:26px 0}
+  .lk h3{margin:0 0 4px;font-size:15px;letter-spacing:.16em;font-weight:700;text-transform:uppercase;
+    display:flex;justify-content:space-between;align-items:baseline}
+  .lk h3 .del{font-size:11px;letter-spacing:.1em;color:#b33;cursor:pointer;font-weight:400}
+  .lk .strip{display:flex;gap:1px;margin-top:14px;flex-wrap:wrap}
+  .lk .strip .s{width:110px;height:130px;background:var(--cell);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .lk .strip .s img{width:84%;height:84%;object-fit:contain;mix-blend-mode:multiply}
+  .lk .names{font-size:12.5px;color:var(--muted);margin-top:10px;letter-spacing:.02em}
+  .emptymsg{color:var(--muted);font-size:13.5px;letter-spacing:.06em;padding:60px 0;text-align:center}
+
+  /* ---------- 详情滑出面板 ---------- */
+  #shade{position:fixed;inset:0;background:rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:.25s;z-index:30}
+  #shade.show{opacity:1;pointer-events:auto}
+  #panel{position:fixed;top:0;right:0;bottom:0;width:var(--panelW);background:#fff;z-index:40;
+    transform:translateX(102%);transition:transform .32s cubic-bezier(.2,.7,.2,1);overflow-y:auto}
+  #panel.show{transform:none}
+  #panel .close{position:sticky;top:0;float:right;margin:16px 18px 0 0;font-size:20px;cursor:pointer;
+    background:#fff;border:none;padding:6px 10px;line-height:1;z-index:2}
+  #panel .photo{background:#f4f4f4;min-height:52vh;display:flex;align-items:center;justify-content:center;padding:30px}
+  #panel .photo img{max-width:100%;max-height:60vh;object-fit:contain;mix-blend-mode:multiply}
+  #panel .info{padding:26px 34px 60px}
+  .kicker{font-size:12.5px;color:#666;letter-spacing:.06em;margin-bottom:14px}
+  .titleRow{display:flex;gap:14px;align-items:center;margin-bottom:4px}
+  .titleRow .mini{width:56px;height:56px;background:var(--cell);flex-shrink:0;display:flex;align-items:center;justify-content:center}
+  .titleRow .mini img{width:80%;height:80%;object-fit:contain;mix-blend-mode:multiply}
+  .titleRow h2{margin:0;font-size:clamp(22px,4vw,32px);letter-spacing:.02em;font-weight:700;text-transform:uppercase;line-height:1.1}
+  .subcn{font-size:14px;color:#555;margin:6px 0 22px}
+  .sec{border-top:1px solid var(--line);padding:18px 0}
+  .sec .lab{font-size:11.5px;letter-spacing:.22em;font-weight:700;color:#444;text-transform:uppercase;margin-bottom:12px}
+  .swatches{display:flex;gap:10px}
+  .sw{width:34px;height:34px;border-radius:50%;border:1px solid rgba(0,0,0,.08)}
+  .notes{font-size:13.5px;color:#333;line-height:1.7}
+  .pbtns{display:flex;gap:10px;margin-top:26px}
+  .pbtns button{flex:1;padding:13px;font-size:12.5px;letter-spacing:.16em;font-weight:700;text-transform:uppercase;
+    cursor:pointer;border:1px solid #111;background:#111;color:#fff;font-family:inherit}
+  .pbtns button.alt{background:#fff;color:#111}
+
+  /* ---------- 底部选择条 ---------- */
+  #bar{position:fixed;left:50%;bottom:22px;transform:translate(-50%,140%);transition:.25s;z-index:25;
+    background:#111;color:#fff;border-radius:999px;padding:12px 10px 12px 22px;display:flex;align-items:center;gap:16px;
+    box-shadow:0 10px 30px rgba(0,0,0,.25);white-space:nowrap}
+  #bar.show{transform:translate(-50%,0)}
+  #bar .t{font-size:12.5px;letter-spacing:.14em;font-weight:600}
+  #bar button{border:none;border-radius:999px;padding:9px 16px;font-size:12px;letter-spacing:.12em;font-weight:700;
+    cursor:pointer;background:#fff;color:#111;font-family:inherit}
+  #bar button.link{background:transparent;color:#999}
+
+  /* ---------- AI 区 ---------- */
+  .ai{border-top:1px solid var(--line);margin-top:40px;padding-top:26px}
+  .ai summary{font-size:12px;letter-spacing:.2em;font-weight:700;color:#666;cursor:pointer;text-transform:uppercase}
+  .ai .frm{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  .ai input{flex:1;min-width:160px;padding:11px 13px;border:1px solid var(--line);font-size:13px;font-family:inherit;background:#fafafa}
+  .ai button{padding:11px 20px;font-size:12px;letter-spacing:.14em;font-weight:700;text-transform:uppercase;
+    border:1px solid #111;background:#111;color:#fff;cursor:pointer;font-family:inherit}
+  .ai .msg{font-size:13px;margin-top:12px;color:#666;display:none}
+  .ai .msg.show{display:block}
+  .ai .msg.err{color:#b33}
+</style>
+</head>
+<body>
+
+<nav id="nav"></nav>
+<div id="view"></div>
+
+<div id="bar">
+  <span class="t">已选 <span id="barN">0</span> 件</span>
+  <button onclick="saveLook()">保存 OUTFIT</button>
+  <button class="link" onclick="clearPicks()">清空</button>
+</div>
+
+<div id="shade" onclick="closePanel()"></div>
+<aside id="panel">
+  <button class="close" onclick="closePanel()">✕</button>
+  <div id="panelBody"></div>
+</aside>
+
+<script>
+/* ================= 数据 ================= */
+const ITEMS = [
+  {id:'001', img:'images/001.jpg', en:'WHITE SQUARE-NECK TANK', cn:'白色方领背心', cat:'TOPS', season:'春夏',
+   pal:['#e8e6e0','#a3aaa5','#4f6164'], notes:'简洁方领修身背心 · 配牛仔长裙很飒'},
+  {id:'003', img:'images/003.jpg', en:'BAROQUE HALTER TOP', cn:'黑花纹吊带抹胸', cat:'TOPS', season:'夏',
+   pal:['#f5cdac','#9c3325','#3a2a20'], notes:'复古提花细吊带 · 度假感'},
+  {id:'004', img:'images/004.jpg', en:'BROWN RUCHED CAMI', cn:'棕色褶皱吊带上衣', cat:'TOPS', season:'夏',
+   pal:['#63595a','#a9a298','#28272a'], notes:'胸前抽褶设计 · 慵懒性感'},
+  {id:'005', img:'images/005.jpg', en:'WHITE HALTER DRESS', cn:'白色黑边挂脖连衣裙', cat:'DRESSES', season:'夏',
+   pal:['#e6e2db','#dab295','#1a1a1a'], notes:'极简针织挂脖长裙 · 黑色包边勾勒线条'},
+  {id:'007', img:'images/007.jpg', en:'WHITE BASIC TEE', cn:'白色基础T恤', cat:'TOPS', season:'四季',
+   pal:['#e7e8e9','#d5d7d8','#bfc2c3'], notes:'万能白T · 怎么搭都行 · 纯棉'},
+  {id:'008', img:'images/008.jpg', en:'BLACK OVERSIZED HOODIE', cn:'黑色连帽卫衣', cat:'TOPS', season:'秋冬',
+   pal:['#1b1b1e','#d3c5b8','#e4e5e6'], notes:'oversize 黑卫衣 · 配缎面长裙混搭高级'},
+  {id:'009', img:'images/009.jpg', en:'NAVY ZIP JACKET', cn:'藏青拉链短外套', cat:'JACKETS', season:'春秋',
+   pal:['#15141c','#615f6a','#8b93a5'], notes:'学院风短外套 · 内搭格纹衬衫有层次'},
+  {id:'010', img:'images/010.jpg', en:'GREEN STRIPE KNIT VEST', cn:'绿白条纹针织背心', cat:'TOPS', season:'春夏',
+   pal:['#2c8a56','#e0d9cf','#a08e76'], notes:'清新条纹小背心 · 元气显白'},
+  {id:'011', img:'images/011.jpg', en:'BLACK BANANA PANTS', cn:'黑色阔腿香蕉裤', cat:'BOTTOMS', season:'四季',
+   pal:['#101418','#595d5f','#e2e4e6'], notes:'弧形轮廓阔腿裤 · 遮肉显瘦 · 垂感面料'},
+  {id:'012', img:'images/012.jpg', en:'OAT PRINT HOODIE', cn:'燕麦色印花连帽卫衣', cat:'TOPS', season:'秋冬',
+   pal:['#d3c8ba','#b5a596','#7a6a55'], notes:'The Secret Garden 印花 · 加绒软乎乎'},
+  {id:'013', img:'images/013.jpg', en:'STRIPE CABLE-KNIT ZIP CARDIGAN', cn:'蓝灰条纹麻花针织开衫', cat:'JACKETS', season:'秋冬',
+   pal:['#9c999d','#ded6ce','#6d7484'], notes:'拉链连帽麻花针织 · 学院感满分 · 羊毛混纺'},
+  {id:'014', img:'images/014.jpg', en:'WHITE STITCH WORK PANTS', cn:'白色明线工装直筒裤', cat:'BOTTOMS', season:'四季',
+   pal:['#dee0df','#aeaaa1','#222728'], notes:'MOUSSY · 明线设计 · 直筒利落'},
+  {id:'021', img:'images/021.jpg', en:'GREEN RINGER TEE', cn:'绿边 Ringer T恤', cat:'TOPS', season:'春夏',
+   pal:['#e9e8e4','#169d65','#a0caab'], notes:'MRS Studios · A votre santé 复古滚边'},
+  {id:'026', img:'images/026.jpg', en:'BLACK SLIT DENIM SKIRT', cn:'黑色开衩牛仔长裙', cat:'BOTTOMS', season:'四季',
+   pal:['#272729','#5a5a5c','#d5ab95'], notes:'高开衩毛边下摆 · 酷感直筒裙'},
+  {id:'027', img:'images/027.jpg', en:'NAVY COLLARED DRESS', cn:'藏青娃娃领连衣裙', cat:'DRESSES', season:'春秋',
+   pal:['#181f23','#eae6da','#524f36'], notes:'白色娃娃领 + 泡泡袖 · 法式复古'},
+  {id:'f01', img:'images/figma_01_3-172.jpg', en:'CAMEL TRENCH COAT', cn:'驼色双排扣风衣', cat:'JACKETS', season:'春秋',
+   pal:['#caa98b','#b59174','#8a6a4d'], notes:'经典系带双排扣 · 通勤百搭'},
+  {id:'t01', img:'images/taobao_01_2026-03-08_ITSNIKAR.jpg', en:'BLACK WIDE-LEG TROUSERS', cn:'黑色低腰阔腿西装裤', cat:'BOTTOMS', season:'四季',
+   pal:['#222324','#5f5f60','#a0a1a1'], notes:'ITSNIKAR · 垂感阔腿 · 腿长两米'},
+  {id:'t02', img:'images/taobao_02_2026-03-08_ITSNIKAR.jpg', en:'GRAY SLIM TEE', cn:'灰色修身短袖T恤', cat:'TOPS', season:'春夏',
+   pal:['#c6c7c6','#a8a9a8','#8f918f'], notes:'ITSNIKAR · 基础修身小T · 好叠穿'},
+  {id:'t03', img:'images/taobao_03_2026-03-08_NO_LOGO_OFFICAL.jpg', en:'CREAM MOCK-NECK SWEATSHIRT', cn:'米白小高领卫衣', cat:'TOPS', season:'秋冬',
+   pal:['#eeece1','#ddd9c8','#c9c4b0'], notes:'NO LOGO · 简约小高领 · 干净耐看'},
+  {id:'t06', img:'images/taobao_06_2026-03-01_陌素小姐.jpg', en:'BROWN SUEDE VEST', cn:'棕色麂皮马甲', cat:'JACKETS', season:'春秋',
+   pal:['#632910','#91642d','#6e5724'], notes:'陌素小姐 · 手工缝边西部风 · 配泡泡袖衬衫绝了'},
+];
+const CATS = [
+  {key:'ALL', cn:''}, {key:'TOPS', cn:''}, {key:'JACKETS', cn:''},
+  {key:'BOTTOMS', cn:''}, {key:'DRESSES', cn:''}, {key:'OUTFITS', cn:''}
+];
+
+/* ================= 状态 ================= */
+const store = {
+  get(k,d){ try{ return JSON.parse(localStorage.getItem('wv_'+k)) ?? d }catch(e){ return d } },
+  set(k,v){ try{ localStorage.setItem('wv_'+k, JSON.stringify(v)) }catch(e){} }
+};
+let looks = store.get('looks', []);
+let picked = new Set();
+let tab = 'ALL';
+const $ = id => document.getElementById(id);
+const esc = s => String(s??'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+/* ================= 导航 ================= */
+function countOf(k){
+  if(k==='ALL') return ITEMS.length;
+  if(k==='OUTFITS') return looks.length;
+  return ITEMS.filter(i=>i.cat===k).length;
+}
+function renderNav(){
+  $('nav').innerHTML = `<div class="brand">WARDROBE<span>衣橱</span></div>` +
+    CATS.map(c=>`<div class="tab ${tab===c.key?'on':''}" onclick="setTab('${c.key}')">${c.key}<small>${countOf(c.key)}</small></div>`).join('');
+}
+function setTab(k){ tab=k; renderNav(); renderView(); }
+
+/* ================= 视图 ================= */
+function renderView(){
+  if(tab==='OUTFITS') return renderOutfits();
+  const list = tab==='ALL'? ITEMS : ITEMS.filter(i=>i.cat===tab);
+  $('view').innerHTML = `<div class="grid">` + list.map(it=>`
+    <div class="cell ${picked.has(it.id)?'picked':''}" id="c_${it.id}" onclick="openPanel('${it.id}')">
+      <img src="${it.img}" loading="lazy" alt="${esc(it.cn)}">
+      <div class="pk" onclick="event.stopPropagation();togglePick('${it.id}')">✓</div>
+    </div>`).join('') + `</div>`;
+}
+
+/* ================= 详情面板 ================= */
+function openPanel(id){
+  const it = ITEMS.find(x=>x.id===id); if(!it) return;
+  $('panelBody').innerHTML = `
+    <div class="photo"><img src="${it.img}"></div>
+    <div class="info">
+      <div class="titleRow">
+        <div class="mini"><img src="${it.img}"></div>
+        <h2>${esc(it.en)}</h2>
+      </div>
+      <div class="subcn">${esc(it.cn)}</div>
+      <div class="sec"><div class="lab">${esc(it.cat)}</div></div>
+      <div class="sec">
+        <div class="lab">Colour Palette</div>
+        <div class="swatches">${it.pal.map(c=>`<div class="sw" style="background:${c}" title="${c}"></div>`).join('')}</div>
+      </div>
+      <div class="sec">
+        <div class="lab">Notes</div>
+        <div class="notes">${esc(it.notes)} · 适合季节：${esc(it.season)}</div>
+      </div>
+      <div class="pbtns">
+        <button onclick="togglePick('${it.id}');openPanel('${it.id}')">${picked.has(it.id)?'✓ 已选入搭配':'选入搭配'}</button>
+        <button class="alt" onclick="closePanel()">返回</button>
+      </div>
+    </div>`;
+  $('shade').classList.add('show'); $('panel').classList.add('show');
+}
+function closePanel(){ $('shade').classList.remove('show'); $('panel').classList.remove('show'); }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closePanel(); });
+
+/* ================= 搭配 ================= */
+function togglePick(id){
+  picked.has(id)? picked.delete(id) : picked.add(id);
+  if(tab!=='OUTFITS') renderView();
+  $('barN').textContent = picked.size;
+  $('bar').classList.toggle('show', picked.size>0);
+}
+function clearPicks(){ picked.clear(); if(tab!=='OUTFITS') renderView(); $('bar').classList.remove('show'); }
+function saveLook(){
+  if(picked.size<2) return alert('至少选 2 件再保存哦。');
+  const name = prompt('给这套 OUTFIT 起个名字：','未命名搭配');
+  if(name===null) return;
+  looks.unshift({id:'L'+Date.now(), name:name||'未命名搭配', items:[...picked], note:''});
+  store.set('looks',looks); clearPicks(); renderNav(); setTab('OUTFITS');
+}
+function delLook(id){ looks=looks.filter(l=>l.id!==id); store.set('looks',looks); renderNav(); renderOutfits(); }
+
+function renderOutfits(){
+  const body = looks.length ? looks.map(l=>`
+    <div class="lk">
+      <h3>${esc(l.name)}<span class="del" onclick="delLook('${l.id}')">删除</span></h3>
+      <div class="strip">${l.items.map(id=>{
+        const it=ITEMS.find(x=>x.id===id);
+        return it?`<div class="s" onclick="openPanel('${it.id}')"><img src="${it.img}" title="${esc(it.cn)}"></div>`:'';
+      }).join('')}</div>
+      <div class="names">${l.items.map(id=>ITEMS.find(x=>x.id===id)?.cn).filter(Boolean).join(' + ')}</div>
+      ${l.note?`<div class="names">💡 ${esc(l.note)}</div>`:''}
+    </div>`).join('')
+    : `<div class="emptymsg">还没有 OUTFIT — 回到衣橱，把鼠标移到单品上点右上角 ✓ 选几件，然后保存。</div>`;
+
+  $('view').innerHTML = `<div class="outfits">${body}
+    <details class="ai">
+      <summary>✨ AI Styling（可选 · 需 API Key · 可接 Kimi）</summary>
+      <div class="frm">
+        <input type="password" id="apiKey" placeholder="API Key" value="${esc(store.get('apiKey','')||'')}">
+        <input type="text" id="baseUrl" placeholder="API 地址（默认 OpenAI，接 Kimi 改这里）" value="${esc(store.get('baseUrl','')||'')}">
+        <input type="text" id="aiModel" placeholder="模型" value="${esc(store.get('aiModel','gpt-4o-mini'))}">
+      </div>
+      <div class="frm">
+        <input type="text" id="occasion" placeholder="场合：约会 / 面试 / 周末咖啡厅…">
+        <button onclick="aiSuggest()">AI 搭配</button>
+      </div>
+      <div class="msg" id="aiMsg"></div>
+      <div id="aiOut"></div>
+    </details>
+  </div>`;
+}
+
+/* ================= AI（可选） ================= */
+async function aiSuggest(){
+  const k=$('apiKey').value.trim();
+  const msg=$('aiMsg');
+  store.set('apiKey',k); store.set('baseUrl',$('baseUrl').value.trim()); store.set('aiModel',$('aiModel').value.trim());
+  if(!k){ msg.className='msg show err'; msg.textContent='需要 API Key 才能用 AI 搭配（以后接 Kimi 也填这里）。'; return; }
+  msg.className='msg show'; msg.textContent='AI 正在挑搭配…';
+  try{
+    const list = ITEMS.map(it=>`${it.id}: ${it.cn}（${it.cat}/${it.season}，${it.notes}）`).join('\n');
+    const occ = $('occasion').value.trim();
+    const base = ($('baseUrl').value.trim()||'https://api.openai.com/v1').replace(/\/$/,'');
+    const res = await fetch(base+'/chat/completions',{
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+k},
+      body:JSON.stringify({model:$('aiModel').value.trim()||'gpt-4o-mini',
+        messages:[{role:'user',content:`衣橱单品清单：\n${list}\n\n${occ?'场合：'+occ+'\n':''}只用清单里的单品（用 id 引用），搭配 3 套。只返回 JSON：{"outfits":[{"title":"","ids":[],"reason":""}]}`}],
+        response_format:{type:'json_object'}})
+    });
+    if(!res.ok) throw new Error('接口报错 '+res.status);
+    const data = await res.json();
+    const parsed = JSON.parse(data.choices[0].message.content);
+    $('aiOut').innerHTML = (parsed.outfits||[]).map(o=>`
+      <div class="lk">
+        <h3>${esc(o.title)}<span class="del" onclick='adoptLook(${JSON.stringify(o.ids||[])},${JSON.stringify(String(o.title||"AI 搭配"))},${JSON.stringify(String(o.reason||""))})' style="color:#111">存为 OUTFIT</span></h3>
+        <div class="strip">${(o.ids||[]).map(id=>{const it=ITEMS.find(x=>x.id===id);
+          return it?`<div class="s"><img src="${it.img}"></div>`:''}).join('')}</div>
+        <div class="names">💡 ${esc(o.reason||'')}</div>
+      </div>`).join('');
+    msg.className='msg';
+  }catch(e){ msg.className='msg show err'; msg.textContent=e.message; }
+}
+function adoptLook(ids,name,note){
+  looks.unshift({id:'L'+Date.now(), name, items:ids.filter(id=>ITEMS.find(x=>x.id===id)), note});
+  store.set('looks',looks); renderNav(); renderOutfits();
+}
+
+/* ================= 启动 ================= */
+renderNav(); renderView();
+</script>
+</body>
+</html>
