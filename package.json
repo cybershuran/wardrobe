@@ -1,0 +1,24 @@
+{
+  "name": "wardrobe-gallery",
+  "version": "1.0.0",
+  "description": "个人电子衣橱：极简画廊风格的静态网页 + AI 服装重绘管线。",
+  "main": "items.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cybershuran/wardrobe.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/cybershuran/wardrobe/issues"
+  },
+  "homepage": "https://github.com/cybershuran/wardrobe#readme",
+  "dependencies": {
+    "sharp": "^0.35.3"
+  }
+}

@@ -1,2 +1,5 @@
 .DS_Store
 selfie/
+.venv/
+.env
+node_modules/
