@@ -76,6 +76,8 @@ const ITEMS = [
    pal:['#f0efeb','#dcdad2','#c2c0b6'], notes:'AI 重绘自日常照 · 及膝伯慕达 · 清爽利落'},
   {id:'s17', img:'images/s17_mohair-sweater.webp', en:'BLUE-GRAY MOHAIR SWEATER', cn:'蓝灰条纹马海毛毛衣', cat:'TOPS', season:'秋冬',
    pal:['#93a2b8','#c3cbd8','#3e4a63'], notes:'AI 重绘自日常照 · 抽象笔触条纹 · 毛茸茸'},
+  {id:'u01', img:'images/u01_2026-08-02_striped-short-sleeve-t-shirt.webp', en:'STRIPED SHORT-SLEEVE T-SHIRT', cn:'测试条纹T恤', cat:'TOPS', season:'春夏',
+   pal:['#000000','#ffffff','#8b8b8b'], notes:'端到端测试'},
 ];
 const CATS = [
   {key:'ALL', cn:''}, {key:'TOPS', cn:''}, {key:'JACKETS', cn:''},
