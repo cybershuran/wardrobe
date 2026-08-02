@@ -217,13 +217,17 @@ function renderOutfits(){
     </div>`).join('')
     : `<div class="emptymsg">还没有 OUTFIT — 回到衣橱，把鼠标移到单品上点右上角 ✓ 选几件，然后保存。</div>`;
 
+  // 本地打开时走本机代理（Key 由代理注入）；线上则直连 Kimi 开放平台（自带 CORS）
+  const hint = isLocal()
+    ? 'API Key 留空即可（由本机代理注入）'
+    : '填一次 Kimi 开放平台 Key，只存在这台设备上';
   $('view').innerHTML = `<div class="outfits">${body}
     <details class="ai">
-      <summary>✨ AI Styling（可选 · 填一次 Kimi Key 即可）</summary>
+      <summary>✨ AI Styling（${esc(hint)}）</summary>
       <div class="frm">
-        <input type="password" id="apiKey" placeholder="API Key（用本机代理时免填）" value="${esc(store.get('apiKey','')||'')}">
-        <input type="text" id="baseUrl" placeholder="API 地址" value="${esc(store.get('baseUrl','http://127.0.0.1:8643'))}">
-        <input type="text" id="aiModel" placeholder="模型" value="${esc(store.get('aiModel','kimi-for-coding'))}">
+        <input type="password" id="apiKey" placeholder="${isLocal()?'API Key（本机代理免填）':'Kimi 开放平台 API Key'}" value="${esc(store.get('apiKey','')||'')}">
+        <input type="text" id="baseUrl" placeholder="API 地址" value="${esc(store.get('baseUrl',defaultBase()))}">
+        <input type="text" id="aiModel" placeholder="模型" value="${esc(store.get('aiModel',defaultModel()))}">
       </div>
       <div class="frm">
         <input type="text" id="occasion" placeholder="场合：约会 / 面试 / 周末咖啡厅…">
@@ -236,20 +240,26 @@ function renderOutfits(){
 }
 
 /* ================= AI（可选） ================= */
+/* 本地打开：走 scripts/proxy.py，Key 由代理注入，浏览器不接触密钥。
+   线上打开：直连 Kimi 开放平台（该接口返回 CORS 头，可浏览器直调）。 */
+const isLocal = () => /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const defaultBase  = () => isLocal() ? 'http://127.0.0.1:8643' : 'https://api.moonshot.cn/v1';
+const defaultModel = () => isLocal() ? 'kimi-for-coding' : 'moonshot-v1-8k';
+
 async function aiSuggest(){
   const k=$('apiKey').value.trim();
   const msg=$('aiMsg');
   store.set('apiKey',k); store.set('baseUrl',$('baseUrl').value.trim()); store.set('aiModel',$('aiModel').value.trim());
-  const localProxy = /^https?:\/\/(127\.0\.0\.1|localhost):/.test($('baseUrl').value.trim());
-  if(!k && !localProxy){ msg.className='msg show err'; msg.textContent='需要 API Key；或本机跑 scripts/proxy.py 并把地址填为 http://127.0.0.1:8643（Key 由代理注入）。'; return; }
+  const localProxy = /^https?:\/\/(127\.0\.0\.1|localhost):/.test($('baseUrl').value.trim()||defaultBase());
+  if(!k && !localProxy){ msg.className='msg show err'; msg.textContent='需要一个 Kimi 开放平台 API Key（platform.moonshot.cn 申请），填进上面第一栏即可，只存在这台设备上。'; return; }
   msg.className='msg show'; msg.textContent='AI 正在挑搭配…';
   try{
     const list = ITEMS.map(it=>`${it.id}: ${it.cn}（${it.cat}/${it.season}，${it.notes}）`).join('\n');
     const occ = $('occasion').value.trim();
-    const base = ($('baseUrl').value.trim()||'http://127.0.0.1:8643').replace(/\/$/,'');
+    const base = ($('baseUrl').value.trim()||defaultBase()).replace(/\/$/,'');
     const res = await fetch(base+'/chat/completions',{
       method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+k},
-      body:JSON.stringify({model:$('aiModel').value.trim()||'kimi-for-coding',
+      body:JSON.stringify({model:$('aiModel').value.trim()||defaultModel(),
         messages:[{role:'user',content:`衣橱单品清单：\n${list}\n\n${occ?'场合：'+occ+'\n':''}只用清单里的单品（用 id 引用），搭配 3 套。只返回 JSON：{"outfits":[{"title":"","ids":[],"reason":""}]}`}],
         response_format:{type:'json_object'}})
     });
