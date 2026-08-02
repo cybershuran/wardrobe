@@ -16,7 +16,7 @@
 ```
 index.html   页面与交互（不含数据）
 items.js     衣橱数据 —— 每件单品一条记录，新增衣服改这里
-images/      产品图（白底 JPG；页面用 mix-blend-mode:multiply 融进格子）
+images/      产品图（透明底 WebP；页面用 drop-shadow 沿轮廓打影）
 selfie/      日常照片输入（gitignore，不入库）
 scripts/     AI 重绘管线
   kimi_ai.py    Kimi 桥接：generate 走 agent-gw（图像生成）；
