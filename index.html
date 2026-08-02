@@ -98,6 +98,7 @@
   .ai input{flex:1;min-width:160px;padding:11px 13px;border:1px solid var(--line);font-size:13px;font-family:inherit;background:#fafafa}
   .ai button{padding:11px 20px;font-size:12px;letter-spacing:.14em;font-weight:700;text-transform:uppercase;
     border:1px solid #111;background:#111;color:#fff;cursor:pointer;font-family:inherit}
+  .ai button.ghost{background:#fff;color:#666;border-color:var(--line)}
   .ai .msg{font-size:13px;margin-top:12px;color:#666;display:none}
   .ai .msg.show{display:block}
   .ai .msg.err{color:#b33}
@@ -232,6 +233,7 @@ function renderOutfits(){
       <div class="frm">
         <input type="text" id="occasion" placeholder="场合：约会 / 面试 / 周末咖啡厅…">
         <button onclick="aiSuggest()">AI 搭配</button>
+        <button class="ghost" onclick="resetAI()" title="地址/模型填错时点这里">重置</button>
       </div>
       <div class="msg" id="aiMsg"></div>
       <div id="aiOut"></div>
@@ -245,26 +247,42 @@ function renderOutfits(){
 const isLocal = () => /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 const defaultBase  = () => isLocal() ? 'http://127.0.0.1:8643' : 'https://api.moonshot.cn/v1';
 const defaultModel = () => isLocal() ? 'kimi-for-coding' : 'moonshot-v1-8k';
+/* 存过的地址可能是无效值（旧数据/手滑），不校验的话 fetch 会当成相对路径
+   打到本站上，报出让人摸不着头脑的 501。无效就静默回退到默认地址。 */
+const cleanBase = v => /^https?:\/\/.+/i.test((v||'').trim()) ? v.trim().replace(/\/$/,'') : defaultBase();
+
+function resetAI(){
+  $('baseUrl').value = defaultBase(); $('aiModel').value = defaultModel();
+  store.set('baseUrl',defaultBase()); store.set('aiModel',defaultModel());
+  const msg=$('aiMsg'); msg.className='msg show'; msg.textContent='已恢复默认设置。';
+}
 
 async function aiSuggest(){
   const k=$('apiKey').value.trim();
   const msg=$('aiMsg');
-  store.set('apiKey',k); store.set('baseUrl',$('baseUrl').value.trim()); store.set('aiModel',$('aiModel').value.trim());
-  const localProxy = /^https?:\/\/(127\.0\.0\.1|localhost):/.test($('baseUrl').value.trim()||defaultBase());
+  const base = cleanBase($('baseUrl').value);
+  if($('baseUrl').value.trim() !== base) $('baseUrl').value = base;   // 把修好的值显示出来
+  store.set('apiKey',k); store.set('baseUrl',base); store.set('aiModel',$('aiModel').value.trim());
+  const localProxy = /^https?:\/\/(127\.0\.0\.1|localhost):/.test(base);
   if(!k && !localProxy){ msg.className='msg show err'; msg.textContent='需要一个 Kimi 开放平台 API Key（platform.moonshot.cn 申请），填进上面第一栏即可，只存在这台设备上。'; return; }
   msg.className='msg show'; msg.textContent='AI 正在挑搭配…';
   try{
     const list = ITEMS.map(it=>`${it.id}: ${it.cn}（${it.cat}/${it.season}，${it.notes}）`).join('\n');
     const occ = $('occasion').value.trim();
-    const base = ($('baseUrl').value.trim()||defaultBase()).replace(/\/$/,'');
     const res = await fetch(base+'/chat/completions',{
       method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+k},
       body:JSON.stringify({model:$('aiModel').value.trim()||defaultModel(),
         messages:[{role:'user',content:`衣橱单品清单：\n${list}\n\n${occ?'场合：'+occ+'\n':''}只用清单里的单品（用 id 引用），搭配 3 套。只返回 JSON：{"outfits":[{"title":"","ids":[],"reason":""}]}`}],
         response_format:{type:'json_object'}})
     });
-    if(!res.ok) throw new Error('接口报错 '+res.status);
-    const data = await res.json();
+    const raw = await res.text();
+    if(!res.ok){
+      let detail=''; try{ detail = JSON.parse(raw).error?.message || '' }catch(e){}
+      if(res.status===401) detail = 'API Key 无效或已过期';
+      if(res.status===404) detail = detail || '地址或模型名不对';
+      throw new Error(`接口报错 ${res.status}${detail?'：'+detail:''}`);
+    }
+    const data = JSON.parse(raw);
     const parsed = JSON.parse(data.choices[0].message.content);
     $('aiOut').innerHTML = (parsed.outfits||[]).map(o=>`
       <div class="lk">
