@@ -19,16 +19,23 @@ items.js     衣橱数据 —— 每件单品一条记录，新增衣服改这�
 images/      产品图（白底 JPG；页面用 mix-blend-mode:multiply 融进格子）
 selfie/      日常照片输入（gitignore，不入库）
 scripts/     AI 重绘管线
-  kimi_ai.py    Kimi agent-gw 桥接（图像生成；vision 检测接口目前不可用）
+  kimi_ai.py    Kimi 桥接：generate 走 agent-gw（图像生成）；
+                detect 走 Kimi Code 接口（视觉识别，OpenAI 兼容）
   generate.sh   生成一件衣服的产品图：generate.sh <名字> <参考照片> "<英文描述>"
-.env          KIMI_API_KEY（gitignore；模板见 .env.example）
+.env          密钥（gitignore；模板见 .env.example）：
+                KIMI_API_KEY / KIMI_BASE_URL —— agent-gw 图像生成
+                KIMI_CODE_API_KEY / KIMI_CODE_BASE_URL —— Kimi Code 会员 Key，
+                视觉识别与文本（注意：该接口无 CORS 头，网页前端无法直连）
 .venv/        python venv，含 agent_gw SDK（gitignore）
 ```
 
 ## 添加新衣服的流程
 
 1. 把日常照片放进 `selfie/`
-2. 识别照片中的衣服（Kimi vision 接口当前超时不可用，由 Claude 直接看图代替）
+2. 自动识别照片中的衣服：
+   ```sh
+   .venv/bin/python scripts/kimi_ai.py detect --image selfie/IMG_1234.jpg
+   ```
 3. 逐件生成产品图：
    ```sh
    scripts/generate.sh s18_red-coat selfie/IMG_1234.jpg \

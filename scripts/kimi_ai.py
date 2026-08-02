@@ -91,13 +91,68 @@ def _download(url: str, output: Path, mime_type: str | None) -> Path:
     return target
 
 
+def _detect_via_code_api(mime: str, encoded: str, model: str) -> int:
+    """Vision detect through the OpenAI-compatible Kimi Code endpoint.
+
+    Uses curl (like _download) so the system proxy's certificate chain does
+    not trip Python's TLS verification.
+    """
+    import json as _json
+    import os
+    import tempfile
+
+    key = os.environ["KIMI_CODE_API_KEY"]
+    base = os.environ.get("KIMI_CODE_BASE_URL", "https://api.kimi.com/coding/v1").rstrip("/")
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": VISION_PROMPT},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{encoded}"}},
+                ],
+            }
+        ],
+        "max_tokens": 4096,
+    }
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        _json.dump(payload, f)
+        req_path = f.name
+    proc = subprocess.run(
+        ["curl", "-sS", "-m", str(int(CURL_TIMEOUT)), f"{base}/chat/completions",
+         "-H", f"Authorization: Bearer {key}", "-H", "Content-Type: application/json",
+         "-d", f"@{req_path}"],
+        capture_output=True, text=True, timeout=CURL_TIMEOUT + 10,
+    )
+    Path(req_path).unlink(missing_ok=True)
+    if proc.returncode != 0:
+        print(f"Error detecting garments: curl failed: {proc.stderr.strip()}", file=sys.stderr)
+        return 1
+    try:
+        result = _json.loads(proc.stdout)
+        content = result["choices"][0]["message"]["content"]
+    except (ValueError, KeyError, IndexError):
+        print(f"Error detecting garments: unexpected response: {proc.stdout[:300]}", file=sys.stderr)
+        return 1
+    if not content or not str(content).strip():
+        print("The vision response was empty", file=sys.stderr)
+        return 1
+    print(str(content).strip())
+    return 0
+
+
 def cmd_detect(args: argparse.Namespace) -> int:
+    import os
+
     image = Path(args.image)
     if not image.is_file():
         print(f"detect input not found: {image}", file=sys.stderr)
         return 2
     mime = mimetypes.guess_type(image.name)[0] or "image/jpeg"
     encoded = base64.b64encode(image.read_bytes()).decode("ascii")
+    if os.environ.get("KIMI_CODE_API_KEY"):
+        return _detect_via_code_api(mime, encoded, args.model)
     client_cls, error_cls = _client()
     try:
         with client_cls(timeout=DEFAULT_TIMEOUT) as client:
