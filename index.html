@@ -219,11 +219,11 @@ function renderOutfits(){
 
   $('view').innerHTML = `<div class="outfits">${body}
     <details class="ai">
-      <summary>✨ AI Styling（可选 · 需 API Key · 可接 Kimi）</summary>
+      <summary>✨ AI Styling（可选 · 填一次 Kimi Key 即可）</summary>
       <div class="frm">
-        <input type="password" id="apiKey" placeholder="API Key" value="${esc(store.get('apiKey','')||'')}">
-        <input type="text" id="baseUrl" placeholder="API 地址（默认 OpenAI，接 Kimi 改这里）" value="${esc(store.get('baseUrl','')||'')}">
-        <input type="text" id="aiModel" placeholder="模型" value="${esc(store.get('aiModel','gpt-4o-mini'))}">
+        <input type="password" id="apiKey" placeholder="API Key（用本机代理时免填）" value="${esc(store.get('apiKey','')||'')}">
+        <input type="text" id="baseUrl" placeholder="API 地址" value="${esc(store.get('baseUrl','http://127.0.0.1:8643'))}">
+        <input type="text" id="aiModel" placeholder="模型" value="${esc(store.get('aiModel','kimi-for-coding'))}">
       </div>
       <div class="frm">
         <input type="text" id="occasion" placeholder="场合：约会 / 面试 / 周末咖啡厅…">
@@ -240,15 +240,16 @@ async function aiSuggest(){
   const k=$('apiKey').value.trim();
   const msg=$('aiMsg');
   store.set('apiKey',k); store.set('baseUrl',$('baseUrl').value.trim()); store.set('aiModel',$('aiModel').value.trim());
-  if(!k){ msg.className='msg show err'; msg.textContent='需要 API Key 才能用 AI 搭配（以后接 Kimi 也填这里）。'; return; }
+  const localProxy = /^https?:\/\/(127\.0\.0\.1|localhost):/.test($('baseUrl').value.trim());
+  if(!k && !localProxy){ msg.className='msg show err'; msg.textContent='需要 API Key；或本机跑 scripts/proxy.py 并把地址填为 http://127.0.0.1:8643（Key 由代理注入）。'; return; }
   msg.className='msg show'; msg.textContent='AI 正在挑搭配…';
   try{
     const list = ITEMS.map(it=>`${it.id}: ${it.cn}（${it.cat}/${it.season}，${it.notes}）`).join('\n');
     const occ = $('occasion').value.trim();
-    const base = ($('baseUrl').value.trim()||'https://api.openai.com/v1').replace(/\/$/,'');
+    const base = ($('baseUrl').value.trim()||'http://127.0.0.1:8643').replace(/\/$/,'');
     const res = await fetch(base+'/chat/completions',{
       method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+k},
-      body:JSON.stringify({model:$('aiModel').value.trim()||'gpt-4o-mini',
+      body:JSON.stringify({model:$('aiModel').value.trim()||'kimi-for-coding',
         messages:[{role:'user',content:`衣橱单品清单：\n${list}\n\n${occ?'场合：'+occ+'\n':''}只用清单里的单品（用 id 引用），搭配 3 套。只返回 JSON：{"outfits":[{"title":"","ids":[],"reason":""}]}`}],
         response_format:{type:'json_object'}})
     });
