@@ -29,7 +29,8 @@
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1px;background:#fff;padding:1px 0}
   .cell{background:var(--cell);aspect-ratio:1;position:relative;cursor:pointer;overflow:hidden;
     display:flex;align-items:center;justify-content:center}
-  .cell img{width:82%;height:82%;object-fit:contain;mix-blend-mode:multiply;transition:transform .3s}
+  .cell img{width:82%;height:82%;object-fit:contain;transition:transform .3s;
+    filter:drop-shadow(0 6px 14px rgba(0,0,0,.13)) drop-shadow(0 1px 3px rgba(0,0,0,.10))}
   .cell:hover img{transform:scale(1.05)}
   .cell .pk{position:absolute;top:12px;right:12px;width:26px;height:26px;border-radius:50%;
     border:1.5px solid #bbb;background:rgba(255,255,255,.85);color:transparent;
@@ -46,7 +47,8 @@
   .lk h3 .del{font-size:11px;letter-spacing:.1em;color:#b33;cursor:pointer;font-weight:400}
   .lk .strip{display:flex;gap:1px;margin-top:14px;flex-wrap:wrap}
   .lk .strip .s{width:110px;height:130px;background:var(--cell);display:flex;align-items:center;justify-content:center;cursor:pointer}
-  .lk .strip .s img{width:84%;height:84%;object-fit:contain;mix-blend-mode:multiply}
+  .lk .strip .s img{width:84%;height:84%;object-fit:contain;
+    filter:drop-shadow(0 3px 8px rgba(0,0,0,.13))}
   .lk .names{font-size:12.5px;color:var(--muted);margin-top:10px;letter-spacing:.02em}
   .emptymsg{color:var(--muted);font-size:13.5px;letter-spacing:.06em;padding:60px 0;text-align:center}
 
@@ -59,12 +61,14 @@
   #panel .close{position:sticky;top:0;float:right;margin:16px 18px 0 0;font-size:20px;cursor:pointer;
     background:#fff;border:none;padding:6px 10px;line-height:1;z-index:2}
   #panel .photo{background:#f4f4f4;min-height:52vh;display:flex;align-items:center;justify-content:center;padding:30px}
-  #panel .photo img{max-width:100%;max-height:60vh;object-fit:contain;mix-blend-mode:multiply}
+  #panel .photo img{max-width:100%;max-height:60vh;object-fit:contain;
+    filter:drop-shadow(0 10px 24px rgba(0,0,0,.14))}
   #panel .info{padding:26px 34px 60px}
   .kicker{font-size:12.5px;color:#666;letter-spacing:.06em;margin-bottom:14px}
   .titleRow{display:flex;gap:14px;align-items:center;margin-bottom:4px}
   .titleRow .mini{width:56px;height:56px;background:var(--cell);flex-shrink:0;display:flex;align-items:center;justify-content:center}
-  .titleRow .mini img{width:80%;height:80%;object-fit:contain;mix-blend-mode:multiply}
+  .titleRow .mini img{width:80%;height:80%;object-fit:contain;
+    filter:drop-shadow(0 2px 5px rgba(0,0,0,.12))}
   .titleRow h2{margin:0;font-size:clamp(22px,4vw,32px);letter-spacing:.02em;font-weight:700;text-transform:uppercase;line-height:1.1}
   .subcn{font-size:14px;color:#555;margin:6px 0 22px}
   .sec{border-top:1px solid var(--line);padding:18px 0}

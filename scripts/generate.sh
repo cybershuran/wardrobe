@@ -29,13 +29,8 @@ for attempt in 1 2 3; do
 done
 [ -f "$TMP" ] || { echo "generation failed"; exit 1; }
 
-# 转 JPG 并把底色增益到纯白（255/242），multiply 下无缝融合
-sips -s format jpeg -s formatOptions 88 "$TMP" --out "images/$NAME.jpg" >/dev/null
-node --input-type=module -e "
-import sharp from 'sharp';
-const f = 'images/$NAME.jpg';
-const buf = await sharp(f).linear(255/242, 0).jpeg({quality: 88}).toBuffer();
-await sharp(buf).toFile(f);
-console.log('saved', f);
-" 2>/dev/null || echo "note: sharp unavailable, background not whitened (install sharp or run whiten manually)"
-echo "done: images/$NAME.jpg — 记得在 items.js 的 ITEMS 里追加条目"
+# 抠成透明底 WebP（网站用 drop-shadow 沿轮廓打影，无需底图）
+cp "$TMP" "images/$NAME.png"
+.venv/bin/python scripts/cutout.py "images/$NAME.png"
+rm -f "images/$NAME.png"
+echo "done: images/$NAME.webp — 记得在 items.js 的 ITEMS 里追加条目"
