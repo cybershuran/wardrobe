@@ -32,20 +32,40 @@ scripts/     AI 重绘管线
 .venv/        python venv，含 agent_gw SDK（gitignore）
 ```
 
-## 添加新衣服的流程
+## 添加新衣服（推荐：上传页面）
 
-1. 把日常照片放进 `selfie/`
-2. 自动识别照片中的衣服：
-   ```sh
-   .venv/bin/python scripts/kimi_ai.py detect --image selfie/IMG_1234.jpg
-   ```
-3. 逐件生成产品图：
-   ```sh
-   scripts/generate.sh s18_red-coat selfie/IMG_1234.jpg \
-     "red wool double-breasted coat worn by the person (coat only)"
-   ```
-4. 在 `items.js` 的 `ITEMS` 数组末尾追加条目（id/img/en/cn/cat/season/pal/notes）
-5. `git add -A && git commit && git push`
+```sh
+.venv/bin/python scripts/import_server.py     # 打开 http://127.0.0.1:8644
+```
+
+拖入一张自拍 → 自动识别出照片里的每件衣服 → 勾选要入库的、填中文名和分类
+→ 点「生成并入库」。图片生成、抠图、写入 `items.js`、记录来源全部自动完成，
+最后 `git push` 即上线。配饰和鞋没有对应分类，默认不勾选。
+
+手动流程（需要精细控制描述时）：
+
+```sh
+.venv/bin/python scripts/kimi_ai.py detect --image selfie/IMG_1234.jpg   # 识别
+scripts/generate.sh s18_red-coat selfie/IMG_1234.jpg \
+  "red wool double-breasted coat worn by the person (coat only)"          # 生成
+.venv/bin/python scripts/wardrobe.py add s18 --img images/s18_red-coat.webp \
+  --en "RED WOOL COAT" --cn 红色羊毛大衣 --cat JACKETS --season 秋冬        # 入库
+```
+
+## 管理单品（删除 / 重绘）
+
+```sh
+.venv/bin/python scripts/wardrobe.py list [关键词]      # 查看 id
+.venv/bin/python scripts/wardrobe.py remove <id>        # 删除（连图片一起）
+.venv/bin/python scripts/wardrobe.py remove <id> --keep-image
+.venv/bin/python scripts/wardrobe.py redraw <id>        # 重绘，沿用原照片和描述
+.venv/bin/python scripts/wardrobe.py redraw <id> --desc "更准确的英文描述"
+.venv/bin/python scripts/wardrobe.py redraw <id> --ref selfie/别的照片.jpg
+```
+
+重绘只换图片，条目的名称/分类/备注不变，`items.js` 里的引用也不用改。
+来源照片与描述记在 `.sources.json`（gitignore），所以 `redraw` 通常不用带参数。
+早期批量导入的单品没有来源记录，重绘时需补 `--ref` 和 `--desc`。
 
 ## AI 搭配怎么用
 

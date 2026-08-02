@@ -5,3 +5,4 @@ selfie/
 node_modules/
 __pycache__/
 *.pyc
+.sources.json
