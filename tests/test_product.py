@@ -209,6 +209,22 @@ class TestServer(unittest.TestCase):
         code, _ = http("POST", "/api/nope", {})
         self.assertEqual(code, 404)
 
+    def test_classify(self):
+        """识别结果分类：外套纠偏到 JACKETS，其余按部位映射，连衣裙不误判。"""
+        c = serve.classify
+        self.assertEqual(c({"part": "upperbody", "name": "houndstooth blazer",
+                            "cn": "格纹西装外套", "tags": ["blazer"]}), "JACKETS")
+        self.assertEqual(c({"part": "upperbody", "name": "cream turtleneck sweater",
+                            "cn": "米白色高领针织衫", "tags": ["knit"]}), "TOPS")
+        self.assertEqual(c({"part": "upperbody", "name": "驼色羊毛大衣",
+                            "cn": "驼色羊毛大衣", "tags": []}), "JACKETS")
+        self.assertEqual(c({"part": "wholebody_up", "name": "black jumpsuit",
+                            "cn": "黑色连体裤", "tags": []}), "DRESSES")
+        self.assertEqual(c({"part": "lowerbody", "name": "jeans"}), "BOTTOMS")
+        self.assertEqual(c({"part": "shoes", "name": "loafers"}), "SHOES")
+        self.assertEqual(c({"part": "accessories_up", "name": "silk scarf"}),
+                         "ACCESSORIES")
+
 
 # ---------------------------------------------------------------- 前端
 

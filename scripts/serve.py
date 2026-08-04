@@ -46,6 +46,24 @@ PART_TO_CAT = {
     "accessories_up": "ACCESSORIES",
     "shoes": "SHOES",
 }
+# 视觉模型只报「穿在上半身」，外套类会被错归 TOPS；按名称/标签纠偏。
+# 只在上身类里生效，jumpsuit / 连衣裙等 wholebody_up 不受影响。
+JACKET_HINTS = (
+    "coat", "jacket", "blazer", "parka", "trench", "cardigan", "puffer",
+    "windbreaker", "bomber", "anorak", "overcoat", "peacoat",
+    "外套", "西装", "大衣", "风衣", "开衫", "夹克", "羽绒服", "马甲",
+)
+
+
+def classify(item: dict) -> str:
+    """识别结果 → 衣橱分类。"""
+    cat = PART_TO_CAT.get(item.get("part", ""), "TOPS")
+    if cat == "TOPS":
+        text = " ".join([item.get("name", ""), item.get("cn", ""),
+                         " ".join(item.get("tags") or [])]).lower()
+        if any(h in text for h in JACKET_HINTS):
+            cat = "JACKETS"
+    return cat
 MIME = {"html": "text/html; charset=utf-8", "js": "text/javascript; charset=utf-8",
         "css": "text/css", "json": "application/json",
         "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
@@ -558,8 +576,7 @@ class Handler(BaseHTTPRequestHandler):
 
         items = detect(ref)
         for it in items:
-            part = it.get("part", "")
-            it["cat"] = PART_TO_CAT.get(part, "TOPS")
+            it["cat"] = classify(it)
             it["notes"] = " · ".join(it.get("tags") or [])
             it["pick"] = True                    # 鞋和配饰也有分类了，默认全部勾选
         self._json(200, {"photo": str(ref.relative_to(ROOT)),
