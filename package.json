@@ -4,6 +4,7 @@
   "description": "个人电子衣橱：极简画廊风格的静态网页 + AI 服装重绘管线。",
   "main": "items.js",
   "scripts": {
+    "dev": "node scripts/dev-server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

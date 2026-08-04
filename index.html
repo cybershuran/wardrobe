@@ -24,6 +24,9 @@
     padding:6px 0;border-bottom:2px solid transparent;flex-shrink:0}
   .tab small{font-weight:400;letter-spacing:0;color:#aaa;margin-left:5px;font-size:11.5px}
   .tab.on{color:var(--ink);border-bottom-color:var(--ink)}
+  .admin-link{margin-left:auto;font-size:12.5px;letter-spacing:.18em;font-weight:600;color:#666;
+    text-decoration:none;padding:6px 14px;border:1px solid var(--line);flex-shrink:0;transition:.15s}
+  .admin-link:hover{color:var(--ink);border-color:var(--ink)}
 
   /* ---------- 网格 ---------- */
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1px;background:#fff;padding:1px 0}
@@ -142,8 +145,13 @@ function countOf(k){
   return ITEMS.filter(i=>i.cat===k).length;
 }
 function renderNav(){
+  // 管理台与站点同源同进程（serve.py），本地打开时入口必然有效；
+  // file:// 直开时若探测到本地服务在运行，同样给出入口；线上静态站没有管理台，不显示
+  const href = isLocal() ? '/admin' : (localServer ? localServer + '/admin' : null);
+  const admin = href
+    ? `<a class="admin-link" href="${href}" target="_blank" rel="noopener">管理台 →</a>` : '';
   $('nav').innerHTML = `<div class="brand">WARDROBE<span>衣橱</span></div>` +
-    CATS.map(c=>`<div class="tab ${tab===c.key?'on':''}" onclick="setTab('${c.key}')">${c.key}<small>${countOf(c.key)}</small></div>`).join('');
+    CATS.map(c=>`<div class="tab ${tab===c.key?'on':''}" onclick="setTab('${c.key}')">${c.key}<small>${countOf(c.key)}</small></div>`).join('') + admin;
 }
 function setTab(k){ tab=k; renderNav(); renderView(); }
 
@@ -218,15 +226,16 @@ function renderOutfits(){
     </div>`).join('')
     : `<div class="emptymsg">还没有 OUTFIT — 回到衣橱，把鼠标移到单品上点右上角 ✓ 选几件，然后保存。</div>`;
 
-  // 本地打开时走本机代理（Key 由代理注入）；线上则直连 Kimi 开放平台（自带 CORS）
-  const hint = isLocal()
-    ? 'API Key 留空即可（由本机代理注入）'
+  // 本地（含 file:// 探测到本地服务）由同源服务器注入 Key；线上则直连 Kimi 开放平台（自带 CORS）
+  const serverSide = isLocal() || localServer;
+  const hint = serverSide
+    ? 'API Key 留空即可（由本机服务器注入）'
     : '填一次 Kimi 开放平台 Key，只存在这台设备上';
   $('view').innerHTML = `<div class="outfits">${body}
     <details class="ai">
       <summary>✨ AI Styling（${esc(hint)}）</summary>
       <div class="frm">
-        <input type="password" id="apiKey" placeholder="${isLocal()?'API Key（本机代理免填）':'Kimi 开放平台 API Key'}" value="${esc(store.get('apiKey','')||'')}">
+        <input type="password" id="apiKey" placeholder="${serverSide?'API Key（本地免填）':'Kimi 开放平台 API Key'}" value="${esc(store.get('apiKey','')||'')}">
         <input type="text" id="baseUrl" placeholder="API 地址" value="${esc(store.get('baseUrl',defaultBase()))}">
         <input type="text" id="aiModel" placeholder="模型" value="${esc(store.get('aiModel',defaultModel()))}">
       </div>
@@ -242,10 +251,32 @@ function renderOutfits(){
 }
 
 /* ================= AI（可选） ================= */
-/* 本地打开：走 scripts/proxy.py，Key 由代理注入，浏览器不接触密钥。
+/* 本地打开：走同源 scripts/serve.py 的 /api/ai 转发，Key 由服务端注入，浏览器不接触密钥。
    线上打开：直连 Kimi 开放平台（该接口返回 CORS 头，可浏览器直调）。 */
 const isLocal = () => /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-const defaultBase  = () => isLocal() ? 'http://127.0.0.1:8643' : 'https://api.moonshot.cn/v1';
+const LOCAL_ORIGIN = 'http://127.0.0.1:8642';
+let localServer = null;   // file:// 打开时探测到的本地衣橱服务；探测不到就是纯线上行为
+const defaultBase  = () => isLocal() ? location.origin + '/api/ai'
+                       : localServer ? localServer + '/api/ai'
+                       : 'https://api.moonshot.cn/v1';
+// file:// 直开（双击 index.html）时探测本地服务：在运行就补上管理台入口、AI 默认走本机
+async function probeLocal(){
+  if(isLocal() || location.protocol !== 'file:') return;
+  try{
+    const ctrl = new AbortController();
+    const timer = setTimeout(()=>ctrl.abort(), 1500);
+    const r = await fetch(LOCAL_ORIGIN + '/api/health', {signal: ctrl.signal});
+    clearTimeout(timer);
+    const d = await r.json();
+    if(d.service === 'wardrobe'){ localServer = LOCAL_ORIGIN; migrateLegacyProxy(); renderNav(); }
+  }catch(e){ /* 本地服务没在跑，保持线上形态 */ }
+}
+// 旧版本地代理（8643 端口）已合并进主服务器，静默迁移到同源 /api/ai
+function migrateLegacyProxy(){
+  if((isLocal() || localServer) && /^https?:\/\/(127\.0\.0\.1|localhost):8643\/?$/.test(store.get('baseUrl','')))
+    store.set('baseUrl', defaultBase());
+}
+migrateLegacyProxy();
 const defaultModel = () => isLocal() ? 'kimi-for-coding' : 'moonshot-v1-8k';
 /* 存过的地址可能是无效值（旧数据/手滑），不校验的话 fetch 会当成相对路径
    打到本站上，报出让人摸不着头脑的 501。无效就静默回退到默认地址。 */
@@ -301,6 +332,7 @@ function adoptLook(ids,name,note){
 
 /* ================= 启动 ================= */
 renderNav(); renderView();
+probeLocal();
 </script>
 </body>
 </html>

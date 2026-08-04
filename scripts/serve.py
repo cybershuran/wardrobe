@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
-"""衣橱管理台：上传识别入库 + 删除 / 重绘单品，全部在网页上点。
+"""衣橱本地服务器：一个进程，全部功能。
 
-跑起来：
-    .venv/bin/python scripts/admin_server.py      # http://127.0.0.1:8644
+    .venv/bin/python scripts/serve.py      # http://127.0.0.1:8642
 
-或者双击项目根目录的「衣橱.command」，管理台会一起启动。
+路由：
+    GET  /                主页（画廊）
+    GET  /admin           管理台（上传识别入库 / 删除 / 重绘）
+    GET  /api/health      健康检查
+    GET  /api/items       单品列表（管理台用）
+    POST /api/detect      上传照片 → AI 识别
+    POST /api/generate    生成产品图并入库
+    POST /api/remove      删除单品
+    POST /api/redraw      重绘单品
+    POST /api/ai/*        AI 搭配转发（Key 由服务端注入，浏览器不接触）
+    GET  /*               静态资源（items.js / images/ / selfie/ …）
 
-识别用 Kimi 视觉接口，生成用 agent-gw，都在本机跑，
-密钥只在服务端读取，不进浏览器。
+设计要点：站点、管理台、AI 转发同源同进程 —— 页面能打开，功能就可用，
+不存在「入口指向已死服务」的故障形态。密钥只出现在服务端。
 """
 
 from __future__ import annotations
@@ -17,6 +26,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import unicodedata
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,25 +36,37 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import wardrobe as wb  # noqa: E402
 
 ROOT = wb.ROOT
-PORT = 8644
+PORT = int(os.environ.get("WARDROBE_PORT", "8642"))
+VERSION = "2.1"
+
 PART_TO_CAT = {
     "upperbody": "TOPS",
     "wholebody_up": "DRESSES",
     "lowerbody": "BOTTOMS",
-    "accessories_up": "TOPS",
-    "shoes": "BOTTOMS",
+    "accessories_up": "ACCESSORIES",
+    "shoes": "SHOES",
 }
-MIME = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
-        "webp": "image/webp", "heic": "image/heic", "gif": "image/gif"}
+MIME = {"html": "text/html; charset=utf-8", "js": "text/javascript; charset=utf-8",
+        "css": "text/css", "json": "application/json",
+        "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+        "webp": "image/webp", "heic": "image/heic", "gif": "image/gif",
+        "svg": "image/svg+xml"}
 
+
+# ------------------------------------------------------------------ 环境
 
 def load_env() -> None:
-    for line in (ROOT / ".env").read_text(encoding="utf-8").splitlines():
+    env = ROOT / ".env"
+    if not env.is_file():
+        return
+    for line in env.read_text(encoding="utf-8").splitlines():
         if line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)
         os.environ.setdefault(k.strip(), v.strip())
 
+
+# ------------------------------------------------------------------ 小工具
 
 def slugify(text: str) -> str:
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
@@ -103,7 +125,9 @@ def detect(photo: Path) -> list[dict]:
         raise RuntimeError(f"{exc}｜原文片段: {raw[start:end][:300]}") from exc
 
 
-PAGE = r"""<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+# ------------------------------------------------------------------ 管理台页面
+
+ADMIN_PAGE = r"""<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>衣橱管理台</title><style>
 :root{--ink:#111;--muted:#8b8b8b;--line:#e5e5e5;--cell:#efefef}
@@ -117,6 +141,9 @@ h1 span{font-weight:400;letter-spacing:.1em;color:#555;margin-left:8px}
 .tab{font-size:12.5px;letter-spacing:.18em;font-weight:600;color:#888;cursor:pointer;padding:5px 0;
   border-bottom:2px solid transparent}
 .tab.on{color:var(--ink);border-bottom-color:var(--ink)}
+.home{margin-left:auto;font-size:12.5px;letter-spacing:.18em;font-weight:600;color:#666;
+  text-decoration:none;padding:6px 14px;border:1px solid var(--line);transition:.15s}
+.home:hover{color:var(--ink);border-color:var(--ink)}
 main{max-width:960px;margin:0 auto;padding:28px}
 .hide{display:none}
 #drop{border:1.5px dashed #ccc;padding:56px 20px;text-align:center;color:var(--muted);
@@ -167,6 +194,7 @@ dialog .ft{display:flex;gap:10px;justify-content:flex-end;padding:0 26px 22px}
   <h1>WARDROBE <span>管理台</span></h1>
   <div class="tab on" data-v="mg" onclick="show('mg')">单品管理</div>
   <div class="tab" data-v="im" onclick="show('im')">上传自拍</div>
+  <a class="home" href="/">← 返回衣橱</a>
 </header>
 <main>
   <!-- ============ 单品管理 ============ -->
@@ -181,7 +209,7 @@ dialog .ft{display:flex;gap:10px;justify-content:flex-end;padding:0 26px 22px}
 
   <!-- ============ 上传自拍 ============ -->
   <section id="im" class="hide">
-    <div id="drop">拖入或点击选择一张照片<input type="file" id="file" accept="image/*"></div>
+    <div id="drop">拖入或点击选择自拍（可一次多张）<input type="file" id="file" accept="image/*,.heic,.heif" multiple></div>
     <div id="stage"></div>
     <div class="status" id="status"></div>
   </section>
@@ -277,71 +305,90 @@ function redraw(id){
 
 /* ---------------- 上传导入 ---------------- */
 const drop = $('#drop'), file = $('#file');
-let photoPath = null, detected = [];
+let groups = [];   // [{photo, preview, name, items:[...]}]，每张照片一组
 drop.onclick = () => file.click();
 drop.ondragover = e => { e.preventDefault(); drop.classList.add('hot'); };
 drop.ondragleave = () => drop.classList.remove('hot');
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove('hot');
-  if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]); };
-file.onchange = () => file.files[0] && upload(file.files[0]);
+  addPhotos([...e.dataTransfer.files]); };
+file.onchange = () => { addPhotos([...file.files]); file.value = ''; };
 
-async function upload(f){
-  $('#status').textContent = '上传并识别中…（约 20 秒）';
-  $('#stage').innerHTML = '';
-  const fd = new FormData(); fd.append('photo', f);
-  const r = await fetch('/api/detect', {method:'POST', body:fd});
-  const d = await r.json();
-  if (!r.ok) { $('#status').textContent = '识别失败：' + d.error; return; }
-  photoPath = d.photo; detected = d.items;
+async function addPhotos(files){
+  files = files.filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
+  if (!files.length) return;
+  const multi = files.length > 1;
+  for (let n = 0; n < files.length; n++){
+    const f = files[n];
+    $('#status').textContent = multi
+      ? `上传并识别中 ${n+1}/${files.length}：${f.name}…（每张约 20 秒）`
+      : '上传并识别中…（约 20 秒）';
+    const fd = new FormData(); fd.append('photo', f);
+    try{
+      const r = await fetch('/api/detect', {method:'POST', body:fd});
+      const d = await r.json();
+      if (!r.ok){ $('#stage').insertAdjacentHTML('beforeend',
+        `<div class="done bad">✕ ${esc(f.name)} 识别失败：${esc(d.error)}</div>`); continue; }
+      groups.push({photo:d.photo, preview:d.preview, name:f.name, items:d.items});
+    }catch(e){ $('#stage').insertAdjacentHTML('beforeend',
+      `<div class="done bad">✕ ${esc(f.name)} 上传失败：${esc(e.message)}</div>`); }
+  }
   $('#status').textContent = '';
-  renderDetected(d.preview);
+  renderGroups();
 }
 
-function renderDetected(preview){
-  const cats = ['TOPS','JACKETS','BOTTOMS','DRESSES'];
+function resetGroups(){ groups = []; $('#stage').innerHTML = ''; $('#status').textContent = ''; }
+
+function renderGroups(){
+  const cats = ['TOPS','JACKETS','BOTTOMS','DRESSES','SHOES','ACCESSORIES'];
   const seasons = ['四季','春夏','春秋','夏','秋冬','冬'];
-  $('#stage').innerHTML = `
-    <div class="preview"><img src="${preview}">
-      <div><b>识别到 ${detected.length} 件</b><br>
-      <span style="color:#8b8b8b">取消勾选可跳过；中文名和分类可以改。<br>
-      配饰和鞋没有对应分类，默认不勾选。</span></div></div>
-    ${detected.map((it,i)=>`
-      <div class="card${it.pick?'':' off'}" id="c${i}">
+  const total = groups.reduce((s,g)=>s+g.items.length,0);
+  $('#stage').innerHTML = groups.map((g,gi)=>`
+    <div class="preview"><img src="${g.preview}">
+      <div><b>${esc(g.name)} · 识别到 ${g.items.length} 件</b><br>
+      <span style="color:#8b8b8b">取消勾选可跳过；中文名已自动生成，和分类一样可以改。</span></div></div>
+    ${g.items.map((it,i)=>{const id=`g${gi}_${i}`;return `
+      <div class="card${it.pick?'':' off'}" id="c_${id}">
         <input type="checkbox" ${it.pick?'checked':''}
-          onchange="document.getElementById('c${i}').classList.toggle('off',!this.checked)">
+          onchange="document.getElementById('c_${id}').classList.toggle('off',!this.checked)">
         <div>
           <div><span class="sw" style="background:${esc(it.color)}"></span><b>${esc(it.name)}</b>
             <span style="color:#8b8b8b">· ${esc((it.tags||[]).join(' / '))}</span></div>
           <div class="row">
-            <div><label>中文名</label><input id="cn${i}" value="" placeholder="例：米色宽松T恤"></div>
-            <div><label>分类</label><select id="cat${i}">${cats.map(c=>
+            <div><label>中文名</label><input id="cn_${id}" value="${esc(it.cn||'')}" placeholder="例：米色宽松T恤"></div>
+            <div><label>分类</label><select id="cat_${id}">${cats.map(c=>
               `<option ${c===it.cat?'selected':''}>${c}</option>`).join('')}</select></div>
-            <div><label>季节</label><select id="se${i}">${seasons.map(s=>
+            <div><label>季节</label><select id="se_${id}">${seasons.map(s=>
               `<option>${s}</option>`).join('')}</select></div>
           </div>
           <div class="row"><div style="flex:1"><label>备注</label>
-            <input class="wide" id="nt${i}" value="${esc(it.notes||'')}" style="width:100%"></div></div>
+            <input class="wide" id="nt_${id}" value="${esc(it.notes||'')}" style="width:100%"></div></div>
         </div>
-      </div>`).join('')}
-    <div style="margin-top:22px"><button onclick="runImport()" id="go">生成并入库</button></div>`;
+      </div>`}).join('')}`).join('') +
+    (groups.length ? `<div style="margin-top:22px;display:flex;gap:12px;align-items:center">
+      <button onclick="runImport()" id="go">生成并入库（共 ${total} 件）</button>
+      <button class="alt" onclick="resetGroups()">清空重来</button></div>` : '');
 }
 
 async function runImport(){
   const go = $('#go'); go.disabled = true;
-  const picks = detected.map((it,i)=>({i,it})).filter(({i})=>
-    document.querySelector(`#c${i} input[type=checkbox]`).checked);
+  const picks = [];
+  groups.forEach((g,gi)=>g.items.forEach((it,i)=>{
+    const id = `g${gi}_${i}`;
+    if (document.querySelector(`#c_${id} input[type=checkbox]`).checked)
+      picks.push({photo:g.photo, it, id});
+  }));
   if (!picks.length){ $('#status').textContent = '没有勾选任何单品。'; go.disabled=false; return; }
   let n = 0;
-  for (const {i,it} of picks){
+  for (const p of picks){
     n++;
-    $('#status').textContent = `生成中 ${n}/${picks.length}：${it.name}…（每件约 1 分钟）`;
+    $('#status').textContent = `生成中 ${n}/${picks.length}：${p.it.name}…（每件约 1 分钟）`;
     const r = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({photo: photoPath, item: it, cn: $('#cn'+i).value,
-        cat: $('#cat'+i).value, season: $('#se'+i).value, notes: $('#nt'+i).value})});
+      body: JSON.stringify({photo: p.photo, item: p.it, cn: $('#cn_'+p.id).value,
+        cat: $('#cat_'+p.id).value, season: $('#se_'+p.id).value, notes: $('#nt_'+p.id).value})});
     const d = await r.json();
     $('#status').insertAdjacentHTML('afterend', r.ok
-      ? `<div class="done">✓ ${esc(it.name)} → ${d.id}</div>`
-      : `<div class="done bad">✕ ${esc(it.name)} 失败：${esc(d.error)}</div>`);
+      ? `<div class="done">✓ ${esc(p.it.name)} → ${d.id}</div>`
+      : `<div class="done bad">✕ ${esc(p.it.name)} 失败：${esc(d.error)}</div>`);
   }
   $('#status').textContent = '完成。切到「单品管理」可以看到新单品；确认无误后 git push 就能上线。';
   go.disabled = false;
@@ -352,7 +399,13 @@ loadItems();
 </script></body></html>"""
 
 
+# ------------------------------------------------------------------ 服务器
+
 class Handler(BaseHTTPRequestHandler):
+    server_version = "Wardrobe/2.0"
+
+    # ------------------------------------------------------------ 基础
+
     def _send(self, code: int, body: bytes, ctype: str) -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
@@ -368,29 +421,51 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def _body(self) -> dict:
+        return json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+
     # ------------------------------------------------------------------ GET
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path in ("/", "/index.html"):
-            self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
+            return self._static(ROOT / "index.html")
+        if path in ("/admin", "/admin/", "/admin/index.html"):
+            return self._send(200, ADMIN_PAGE.encode("utf-8"), "text/html; charset=utf-8")
+        if path == "/api/health":
+            # 带服务身份：启动器据此辨认端口上跑的是不是「自己人」；
+            # 放行 CORS 让 file:// 打开的页面也能探测本地服务是否在线
+            body = json.dumps({"ok": True, "service": "wardrobe",
+                               "version": VERSION, "pid": os.getpid(),
+                               "items": len(wb.entries())}, ensure_ascii=False).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
             return
         if path == "/api/items":
-            self.api_items()
-            return
+            return self.api_items()
         target = (ROOT / path.lstrip("/")).resolve()
         if target.is_file() and str(target).startswith(str(ROOT)):
-            ctype = MIME.get(target.suffix.lstrip(".").lower(), "application/octet-stream")
-            self._send(200, target.read_bytes(), ctype)
-        else:
-            self._send(404, b"not found", "text/plain")
+            return self._static(target)
+        self._send(404, b"not found", "text/plain; charset=utf-8")
+
+    def _static(self, target: Path) -> None:
+        ctype = MIME.get(target.suffix.lstrip(".").lower(), "application/octet-stream")
+        self._send(200, target.read_bytes(), ctype)
 
     # ----------------------------------------------------------------- POST
 
     def do_POST(self):
         routes = {"/api/detect": self.api_detect, "/api/generate": self.api_generate,
                   "/api/remove": self.api_remove, "/api/redraw": self.api_redraw}
-        fn = routes.get(self.path)
+        if self.path.startswith("/api/ai/"):
+            fn = self.api_ai
+        else:
+            fn = routes.get(self.path)
         if not fn:
             self._json(404, {"error": "unknown endpoint"})
             return
@@ -398,11 +473,10 @@ class Handler(BaseHTTPRequestHandler):
             fn()
         except Exception as exc:            # 任何失败都回给前端，别把服务打挂
             self._json(500, {"error": str(exc)})
+        except BaseException as exc:        # SystemExit 等也要回前端，否则浏览器永远转圈
+            self._json(500, {"error": str(exc) or exc.__class__.__name__})
 
-    def _body(self) -> dict:
-        return json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-
-    # ------------------------------------------------------------ endpoints
+    # ------------------------------------------------------------ 管理 API
 
     def api_items(self):
         sources = wb.load_sources()
@@ -487,7 +561,7 @@ class Handler(BaseHTTPRequestHandler):
             part = it.get("part", "")
             it["cat"] = PART_TO_CAT.get(part, "TOPS")
             it["notes"] = " · ".join(it.get("tags") or [])
-            it["pick"] = part not in ("accessories_up", "shoes")
+            it["pick"] = True                    # 鞋和配饰也有分类了，默认全部勾选
         self._json(200, {"photo": str(ref.relative_to(ROOT)),
                          "preview": "/" + str(ref.relative_to(ROOT)),
                          "items": items})
@@ -505,23 +579,64 @@ class Handler(BaseHTTPRequestHandler):
         wb.generate(stem, photo, desc)
 
         pal = [c for c in (it.get("color"), it.get("secondaryColor"), "#8b8b8b") if c][:3]
+        # items.js 用单引号包裹，内容里的英文单引号换全角，避免写坏数据文件
+        clean = lambda s: str(s).replace("'", "’").replace("\n", " ")  # noqa: E731
+        en = clean(it["name"].upper())
+        cn = clean(payload.get("cn") or it.get("cn") or it["name"])
+        notes = clean(payload.get("notes", ""))
         q = chr(39)
         entry = (
-            f"  {{id:'{item_id}', img:'images/{stem}.webp', en:'{it['name'].upper()}', "
-            f"cn:'{payload.get('cn') or it['name']}', cat:'{payload.get('cat', 'TOPS')}', "
+            f"  {{id:'{item_id}', img:'images/{stem}.webp', en:'{en}', "
+            f"cn:'{cn}', cat:'{payload.get('cat', 'TOPS')}', "
             f"season:'{payload.get('season', '四季')}',\n"
             f"   pal:[{','.join(q + c + q for c in pal)}], "
-            f"notes:'{payload.get('notes', '')}'}},"
+            f"notes:'{notes}'}},"
         )
         wb.write_entries(wb.entries() + [(item_id, entry)])
         wb.save_source(item_id, photo, desc)
         self._json(200, {"id": item_id, "img": f"images/{stem}.webp"})
 
+    # ------------------------------------------------------------ AI 转发
+
+    def api_ai(self):
+        """同源转发到 Kimi Code 接口，Key 由服务端注入，浏览器不接触。"""
+        key = os.environ.get("KIMI_CODE_API_KEY")
+        if not key:
+            self._json(500, {"error": {"message": "服务端缺少 KIMI_CODE_API_KEY（见 .env.example）"}})
+            return
+        base = os.environ.get("KIMI_CODE_BASE_URL", "https://api.kimi.com/coding/v1").rstrip("/")
+        sub = self.path[len("/api/ai"):]               # 例：/chat/completions
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        with tempfile.NamedTemporaryFile("wb", suffix=".json", delete=False) as f:
+            f.write(body)
+            req_path = f.name
+        # 用 curl 转发：与 kimi_ai.py 一致，避开系统代理的自签证书问题
+        proc = subprocess.run(
+            ["curl", "-sS", "-m", "300", f"{base}{sub}",
+             "-H", f"Authorization: Bearer {key}",
+             "-H", "Content-Type: application/json",
+             "-d", f"@{req_path}"],
+            capture_output=True, timeout=320,
+        )
+        Path(req_path).unlink(missing_ok=True)
+
+        payload = proc.stdout or json.dumps(
+            {"error": {"message": proc.stderr.decode("utf-8", "replace")[:300]}}
+        ).encode()
+        self._send(200 if proc.returncode == 0 else 502, payload, "application/json")
+
 
 def main() -> int:
     load_env()
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"管理台已启动 → http://127.0.0.1:{PORT}\nCtrl-C 退出")
+    try:
+        srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    except OSError:
+        # 端口被占：给启动器和人都能看懂的提示，而不是一屏 traceback
+        print(f"错误：端口 {PORT} 已被占用，衣橱无法启动。", flush=True)
+        print("如果是之前没关干净的衣橱进程，重新双击「衣橱.command」会自动清理；", flush=True)
+        print(f"否则请执行  lsof -nP -i :{PORT}  查看是谁占用了端口。\n", flush=True)
+        return 2
+    print(f"衣橱已启动 → http://127.0.0.1:{PORT}  （管理台 /admin，Ctrl-C 退出）")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

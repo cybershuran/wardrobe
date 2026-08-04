@@ -44,10 +44,11 @@ MIME_EXT = {
     "image/jpg": ".jpg",
 }
 
-VISION_PROMPT = """Identify every distinct wearable clothing item visible in this image. A photo may show one isolated garment or a person wearing several items. Return one record per actual item that should enter a wardrobe. Ignore the person's body and non-wearable background objects.
+VISION_PROMPT = """Identify every distinct wearable item visible in this image — clothing, shoes, and accessories (bags, hats, scarves, belts, jewelry, sunglasses, etc.). A photo may show one isolated garment or a person wearing several items. Return one record per actual item that should enter a wardrobe. Ignore the person's body and non-wearable background objects.
 
 Respond with a JSON object of the shape {"items": [...]} and nothing else. Each item must have:
-- "name": a concise, specific garment name.
+- "name": a concise, specific English garment name.
+- "cn": 简洁具体的中文名称，例如「米色宽松T恤」「黑色厚底乐福鞋」「驼色羊毛围巾」。
 - "part": exactly one of "upperbody", "wholebody_up", "lowerbody", "accessories_up", "shoes".
 - "color": primary color as a #rrggbb hex string.
 - "secondaryColor": a genuinely distinct secondary #rrggbb hex string, or null.

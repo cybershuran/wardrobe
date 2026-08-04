@@ -7,9 +7,11 @@
 
 ## 使用
 
-- 直接打开 `index.html`，或起任意静态服务器（如 `python3 -m http.server`）
+- 线上：直接打开 `index.html`，或任意静态服务器（如 GitHub Pages）
+- 本地全功能：双击 `衣橱.command` —— 一个进程包含站点 + 管理台 + AI 转发
 - 分类浏览 / 单品详情（色板、笔记）/ 勾选单品保存 OUTFIT
-- 可选 AI 搭配：OUTFITS 页底部填入 OpenAI 兼容接口的 Key
+- 管理台：主页右上角「管理台 →」（仅本地显示），或直达 `/admin`
+- 可选 AI 搭配：OUTFITS 页底部，本地免填 Key，线上填 Kimi 开放平台 Key
 
 ## 结构
 
@@ -18,13 +20,17 @@ index.html   页面与交互（不含数据）
 items.js     衣橱数据 —— 每件单品一条记录，新增衣服改这里
 images/      产品图（透明底 WebP；页面用 drop-shadow 沿轮廓打影）
 selfie/      日常照片输入（gitignore，不入库）
-scripts/     AI 重绘管线
+scripts/     服务与 AI 管线
+  serve.py      唯一本地服务器（:8642）：站点 + 管理台(/admin) + 管理 API + AI 转发
+  wardrobe.py   数据层：items.js / .sources.json 读写（CLI 与服务器共用）
   kimi_ai.py    Kimi 桥接：generate 走 agent-gw（图像生成）；
                 detect 走 Kimi Code 接口（视觉识别，OpenAI 兼容）
   generate.sh   生成一件衣服的产品图：generate.sh <名字> <参考照片> "<英文描述>"
   cutout.py     抠透明底：cutout.py <图片...> 或 --all
-  proxy.py      本机 Kimi 代理（本地版 AI 搭配用，见下）
-衣橱.command    双击即可本地启动（自动开代理 + 站点并打开浏览器）
+  dev-server.js npm run dev 纯静态预览（不含 API，调试用）
+tests/       自动化测试：.venv/bin/python -m unittest discover -s tests -v
+衣橱.command    双击即可本地启动（重复双击安全：检测到已运行则直接打开浏览器）
+docs/产品设计.md  产品设计与架构决策
 .env          密钥（gitignore；模板见 .env.example）：
                 KIMI_API_KEY / KIMI_BASE_URL —— agent-gw 图像生成
                 KIMI_CODE_API_KEY / KIMI_CODE_BASE_URL —— Kimi Code 会员 Key，
@@ -32,15 +38,13 @@ scripts/     AI 重绘管线
 .venv/        python venv，含 agent_gw SDK（gitignore）
 ```
 
-## 添加新衣服（推荐：上传页面）
+## 添加新衣服（推荐：管理台）
 
-```sh
-.venv/bin/python scripts/import_server.py     # 打开 http://127.0.0.1:8644
-```
+本地启动后打开 http://127.0.0.1:8642/admin （或主页右上角「管理台 →」）。
 
-拖入一张自拍 → 自动识别出照片里的每件衣服 → 勾选要入库的、填中文名和分类
-→ 点「生成并入库」。图片生成、抠图、写入 `items.js`、记录来源全部自动完成，
-最后 `git push` 即上线。配饰和鞋没有对应分类，默认不勾选。
+拖入一张或多张自拍 → 自动识别出照片里的每件衣服（含鞋和配饰）→
+中文名自动生成，勾选要入库的、可改中文名和分类 → 点「生成并入库」。
+图片生成、抠图、写入 `items.js`、记录来源全部自动完成，最后 `git push` 即上线。
 
 手动流程（需要精细控制描述时）：
 
@@ -79,13 +83,14 @@ Kimi Code Key 不是同一个，按量计费）。在 OUTFITS 页底部把 Key �
 该接口自带 CORS 头，浏览器可直连，不需要任何代理。
 
 **本地版**（用现有的 Kimi Code Key，不用另外申请）
-双击项目里的 `衣橱.command`，浏览器会自动打开 http://localhost:8642 ，
-AI 搭配直接可用、**API Key 一栏留空**（由 `scripts/proxy.py` 从 .env 注入，
-浏览器不接触密钥）。用完关掉那个黑窗口即可。
+双击项目里的 `衣橱.command`，浏览器会自动打开 http://127.0.0.1:8642 ，
+AI 搭配直接可用、**API Key 一栏留空**（由 `scripts/serve.py` 从 .env 注入，
+浏览器不接触密钥）。管理台在同一个服务里：主页右上角「管理台 →」。
+用完关掉那个黑窗口即可。
 
-> 为什么本地版要代理：Kimi Code 接口不返回 CORS 头，且其反滥用防护会拒绝
+> 为什么本地版要服务端转发：Kimi Code 接口不返回 CORS 头，且其反滥用防护会拒绝
 > 云端代理的请求（403 质询页），但本机直连正常。曾试过 Cloudflare Worker，
-> 因此不可行，已弃用。
+> 因此不可行，已弃用。v2 起转发与站点同源同进程，不再有独立代理端口。
 
 ## 设计要点
 
@@ -93,7 +98,7 @@ AI 搭配直接可用、**API Key 一栏留空**（由 `scripts/proxy.py` 从 .e
   没有底图就没有"框中框"；页面用 CSS `drop-shadow` 沿衣服轮廓打柔影，
   白色衣服也能从浅灰格子中清晰分离。抠图顺带去掉了 Kimi 的"AI生成"水印。
 - 生成管线：`generate.sh` 出图后自动抠图输出 `images/<名字>.webp`。
-- 配饰（帽/鞋/腰带）暂无分类，未入库。
+- 分类：TOPS / JACKETS / BOTTOMS / DRESSES / SHOES / ACCESSORIES（包包、帽子、丝巾等都归配饰）。
 
 ## 历史
 

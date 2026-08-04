@@ -80,12 +80,14 @@ def generate(name: str, ref: str, desc: str) -> Path:
     """跑 generate.sh，返回生成的 webp 路径。"""
     proc = subprocess.run(
         [str(ROOT / "scripts" / "generate.sh"), name, ref, desc],
-        cwd=ROOT, text=True, capture_output=True,
+        cwd=ROOT, text=True, capture_output=True, timeout=600,
     )
     out = ROOT / "images" / f"{name}.webp"
     if proc.returncode != 0 or not out.is_file():
         sys.stderr.write(proc.stdout + proc.stderr)
-        raise SystemExit(f"生成失败: {name}")
+        # 不能 raise SystemExit：admin_server 的 do_POST 只捕 Exception，
+        # SystemExit 会让处理线程直接死掉，浏览器端永远等不到响应（看起来就像卡死）
+        raise RuntimeError(f"生成失败: {name}")
     return out
 
 
@@ -132,7 +134,10 @@ def cmd_redraw(args) -> int:
 
     name = Path(field(hit, "img") or "").stem or args.id
     print(f"重绘 {args.id} ← {ref}\n描述: {desc}")
-    generate(name, ref, desc)
+    try:
+        generate(name, ref, desc)
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from exc
     save_source(args.id, ref, desc)
     print(f"完成: images/{name}.webp（条目未变，刷新页面即可看到新图）")
     return 0
