@@ -192,6 +192,12 @@ class TestServer(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertGreater(len(rbody), 1000, "图片响应太小，可能不是真图")
 
+    def test_private_project_files_not_served(self):
+        for path in ("/.env", "/.sources.json", "/scripts/serve.py", "/.git/config"):
+            with self.subTest(path=path):
+                code, _ = http("GET", path)
+                self.assertEqual(code, 404)
+
     def test_path_traversal_blocked(self):
         code, _ = http("GET", "/..%2F..%2Fetc%2Fpasswd")
         self.assertEqual(code, 404)

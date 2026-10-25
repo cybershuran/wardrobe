@@ -466,8 +466,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/items":
             return self.api_items()
-        target = (ROOT / path.lstrip("/")).resolve()
-        if target.is_file() and str(target).startswith(str(ROOT)):
+        # 只提供页面需要的公开资源和本机预览照片，避免把 .env、来源记录、
+        # 脚本或 Git 元数据通过 HTTP 暴露出去。
+        relative = Path(path.lstrip("/"))
+        if relative != Path("items.js") and relative.parts[:1] not in (("images",), ("selfie",)):
+            return self._send(404, b"not found", "text/plain; charset=utf-8")
+        target = (ROOT / relative).resolve()
+        if target.is_file() and target.is_relative_to(ROOT):
             return self._static(target)
         self._send(404, b"not found", "text/plain; charset=utf-8")
 

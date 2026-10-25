@@ -14,6 +14,8 @@ const ITEMS = [
    pal:['#e7e8e9','#d5d7d8','#bfc2c3'], notes:'万能白T · 怎么搭都行 · 纯棉'},
   {id:'008', img:'images/r008_black-hoodie.webp', en:'BLACK OVERSIZED HOODIE', cn:'黑色连帽卫衣', cat:'TOPS', season:'秋冬',
    pal:['#1b1b1e','#d3c5b8','#e4e5e6'], notes:'oversize 黑卫衣 · 配缎面长裙混搭高级'},
+  {id:'009', img:'images/r009_navy-zip-jacket.webp', en:'NAVY ZIP JACKET', cn:'藏青拉链短外套', cat:'JACKETS', season:'春秋',
+   pal:['#15141c','#615f6a','#8b93a5'], notes:'学院风短外套 · 内搭格纹衬衫有层次'},
   {id:'010', img:'images/010.webp', en:'GREEN STRIPE KNIT VEST', cn:'绿白条纹针织背心', cat:'TOPS', season:'春夏',
    pal:['#2c8a56','#e0d9cf','#a08e76'], notes:'清新条纹小背心 · 元气显白'},
   {id:'011', img:'images/r011_black-banana-pants.webp', en:'BLACK BANANA PANTS', cn:'黑色阔腿香蕉裤', cat:'BOTTOMS', season:'四季',
