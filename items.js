@@ -76,6 +76,16 @@ const ITEMS = [
    pal:['#f0efeb','#dcdad2','#c2c0b6'], notes:'AI 重绘自日常照 · 及膝伯慕达 · 清爽利落'},
   {id:'s17', img:'images/s17_mohair-sweater.webp', en:'BLUE-GRAY MOHAIR SWEATER', cn:'蓝灰条纹马海毛毛衣', cat:'TOPS', season:'秋冬',
    pal:['#93a2b8','#c3cbd8','#3e4a63'], notes:'AI 重绘自日常照 · 抽象笔触条纹 · 毛茸茸'},
+  {id:'u01', img:'images/u01_ivory-draped-offshoulder-top.webp', en:'IVORY DRAPED OFF-SHOULDER TOP', cn:'米白色斜肩垂褶上衣', cat:'TOPS', season:'夏',
+   pal:['#f3eee6','#d8d1c7','#b8aea2'], notes:'轻薄垂褶 · 不对称露肩'},
+  {id:'u02', img:'images/u02_fine-stripe-oversized-tee.webp', en:'FINE-STRIPE OVERSIZED TEE', cn:'白底细条纹宽松T恤', cat:'TOPS', season:'春夏',
+   pal:['#f7f7f2','#22262e','#b7bbc2'], notes:'细黑条纹 · 宽松落肩'},
+  {id:'u03', img:'images/u03_black-utility-wide-pants.webp', en:'BLACK UTILITY WIDE-LEG PANTS', cn:'黑色工装阔腿裤', cat:'BOTTOMS', season:'四季',
+   pal:['#12161d','#30343a','#5a5c62'], notes:'宽松裤型 · 侧边工装袋'},
+  {id:'u04', img:'images/u04_beige-wrap-crop-top.webp', en:'BEIGE WRAP CROP TOP', cn:'米色裹身短款长袖', cat:'TOPS', season:'春秋',
+   pal:['#c8beb2','#b7a99b','#e4ddd5'], notes:'交叉裹身 V 领 · 前襟褶皱'},
+  {id:'u05', img:'images/u05_dark-brown-wide-pants.webp', en:'DARK BROWN WIDE-LEG TROUSERS', cn:'深棕色高腰阔腿裤', cat:'BOTTOMS', season:'春秋',
+   pal:['#6b493d','#4a3129','#8b6b60'], notes:'高腰宽腿 · 深棕色垂坠感'},
 ];
 const CATS = [
   {key:'ALL', cn:''}, {key:'TOPS', cn:''}, {key:'JACKETS', cn:''},
